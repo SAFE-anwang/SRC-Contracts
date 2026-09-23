@@ -1835,13 +1835,15 @@ pragma solidity ^0.8.0;
 
 contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable {
     string _baseTokenURI;
-    
+
     uint256 _maxSupply; // 0: unlimited
-    
+
     uint256 _mintPrice;
-    
+
+    address[] _allowAddrs;
     mapping(address => uint256) _allowList;
-    
+    mapping(address => uint256) _addr2index;
+
     event BaseURIUpdated(string newBaseURI);
     event MintPriceUpdated(uint256 newMintPrice);
     event MaxSupplyUpdated(uint256 newMaxSupply);
@@ -1866,6 +1868,13 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable {
         require(_allowList[msg.sender] >= amount_, "exceed available mint count");
 
         _allowList[msg.sender] -= amount_;
+        if(_allowList[msg.sender] == 0) {
+            uint256 index = _addr2index[msg.sender];
+            _allowAddrs[index - 1] = _allowAddrs[_allowAddrs.length - 1];
+            _allowAddrs.pop();
+            _addr2index[_allowAddrs[index - 1]] = index;
+            delete _addr2index[msg.sender];
+        }
         for(uint256 i; i < amount_; i++) {
             _safeMint(to_, ts + i);
         }
@@ -1919,9 +1928,37 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable {
 
     function setAllowList(address[] calldata addresses_, uint256[] calldata amounts_) public onlyOwner {
         require(addresses_.length == amounts_.length, "invalid addresses_ or amounts_");
+        address addr;
         for(uint256 i; i < addresses_.length; i++) {
-            _allowList[addresses_[i]] = amounts_[i];
+            addr = addresses_[i];
+            _allowList[addr] = amounts_[i];
+            if(_addr2index[addr] == 0) {
+                _allowAddrs.push(addr);
+                _addr2index[addr] = _allowAddrs.length;
+            }
         }
+    }
+
+    function getAllowAddrNum() public view returns (uint256) {
+        return _allowAddrs.length;
+    }
+
+    function getAllowAddrs(uint256 _start, uint256 _count) public view returns (address[] memory addrs, uint256[] memory amounts) {
+        require(_allowAddrs.length > 0, "insufficient quantity");
+        require(_start < _allowAddrs.length, "invalid _start, must be in [0, getAllowNum())");
+        require(_count > 0 && _count <= 100, "max return 100 allowed address");
+
+        uint num = _count;
+        if(_start + _count >= _allowAddrs.length) {
+            num = _allowAddrs.length - _start;
+        }
+        addrs = new address[](num);
+        amounts = new uint256[](num);
+        for(uint i; i < num; i++) {
+            addrs[i] = _allowAddrs[i + _start];
+            amounts[i] = _allowList[addrs[i]];
+        }
+        return (addrs, amounts);
     }
 
     function amountAllowToMint(address addr_) public view returns (uint256) {
@@ -1957,6 +1994,6 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable {
     }
 
     function version() public pure override returns (string memory) {
-        return "SRC721-0.0.2";
+        return "SRC721-0.0.3";
     }
 }
