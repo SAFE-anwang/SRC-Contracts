@@ -1855,11 +1855,7 @@ abstract contract SRC721Meta is Ownable {
 // File: contracts/SRC721/SRC721-burnable.sol
 
 
-pragma solidity ^0.8.0;
-
-
-
-
+pragma solidity ^0.8.0;
 
 
 contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
@@ -1872,6 +1868,8 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     address[] _allowAddrs;
     mapping(address => uint256) _allowList;
     mapping(address => uint256) _addr2index;
+
+    uint256 _nextTokenId;
 
     event BaseURIUpdated(string newBaseURI);
     event MintPriceUpdated(uint256 newMintPrice);
@@ -1892,8 +1890,7 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     function mint(address to_, uint256 amount_) public payable {
         require(msg.sender != owner(), "owner can't invoke");
         require(msg.value >= amount_ * _mintPrice, "insufficient balance");
-        uint256 ts = totalSupply();
-        require(ts + amount_ <= _maxSupply, "execeed max supply");
+        require(_nextTokenId + amount_ <= _maxSupply, "execeed max supply");
         require(_allowList[msg.sender] >= amount_, "exceed available mint count");
 
         _allowList[msg.sender] -= amount_;
@@ -1905,8 +1902,9 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
             delete _addr2index[msg.sender];
         }
         for(uint256 i; i < amount_; i++) {
-            _safeMint(to_, ts + i);
+            _safeMint(to_, _nextTokenId + i);
         }
+        _nextTokenId += amount_;
 
         if (msg.value > amount_ * _mintPrice) {
             payable(msg.sender).transfer(msg.value - amount_ * _mintPrice);
@@ -1914,11 +1912,11 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function adminMint(address to_, uint256 amount_) public onlyOwner {
-        uint256 ts = totalSupply();
-        require(ts + amount_ <= _maxSupply, "execeed max supply");
+        require(_nextTokenId + amount_ <= _maxSupply, "execeed max supply");
         for(uint256 i; i < amount_; i++) {
-            _safeMint(to_, ts + i);
+            _safeMint(to_, _nextTokenId + i);
         }
+        _nextTokenId += amount_;
     }
 
     function withdraw() public onlyOwner {
@@ -2023,6 +2021,6 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function version() public pure override returns (string memory) {
-        return "SRC721-burnable-0.0.3";
+        return "SRC721-burnable-0.0.4";
     }
 }
