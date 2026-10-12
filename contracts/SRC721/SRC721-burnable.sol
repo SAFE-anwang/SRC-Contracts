@@ -1782,7 +1782,6 @@ abstract contract Ownable is Context {
 
 pragma solidity ^0.8.0;
 
-
 abstract contract SRC721Meta is Ownable {
     string _orgName;
     bytes _logo;
@@ -1860,10 +1859,11 @@ pragma solidity ^0.8.0;
 
 
 
+
 contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     string _baseTokenURI;
 
-    uint256 _maxSupply; // 0: unlimited
+    uint256 _maxSupply;
 
     uint256 _mintPrice;
 
@@ -1891,6 +1891,7 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
 
     function mint(address to_, uint256 amount_) public payable {
         require(msg.sender != owner(), "owner can't invoke");
+        require(amount_ > 0, "amount is zero");
         require(msg.value >= amount_ * _mintPrice, "insufficient balance");
         require(_nextTokenId + amount_ <= _maxSupply, "execeed max supply");
         require(_allowList[msg.sender] >= amount_, "exceed available mint count");
@@ -1898,9 +1899,13 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
         _allowList[msg.sender] -= amount_;
         if(_allowList[msg.sender] == 0) {
             uint256 index = _addr2index[msg.sender];
-            _allowAddrs[index - 1] = _allowAddrs[_allowAddrs.length - 1];
+            uint256 lastIndex = _allowAddrs.length;
+            if(index != lastIndex) {
+                address lastAddr = _allowAddrs[lastIndex - 1];
+                _allowAddrs[index - 1] = lastAddr;
+                _addr2index[lastAddr] = index;
+            }
             _allowAddrs.pop();
-            _addr2index[_allowAddrs[index - 1]] = index;
             delete _addr2index[msg.sender];
         }
         for(uint256 i; i < amount_; i++) {
@@ -1914,6 +1919,7 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function adminMint(address to_, uint256 amount_) public onlyOwner {
+        require(amount_ > 0, "amount is zero");
         require(_nextTokenId + amount_ <= _maxSupply, "execeed max supply");
         for(uint256 i; i < amount_; i++) {
             _safeMint(to_, _nextTokenId + i);
@@ -1946,7 +1952,7 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function setMaxSupply(uint256 maxSupply_) public onlyOwner {
-        require(maxSupply_ >= totalSupply(), "New max supply must be >= current supply");
+        require(maxSupply_ >= _nextTokenId, "New max supply must be >= total minted");
         _maxSupply = maxSupply_;
         emit MaxSupplyUpdated(maxSupply_);
     }
@@ -1961,7 +1967,7 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
         for(uint256 i; i < addresses_.length; i++) {
             addr = addresses_[i];
             _allowList[addr] = amounts_[i];
-            if(_addr2index[addr] == 0) {
+            if(_addr2index[addr] == 0 && amounts_[i] > 0) {
                 _allowAddrs.push(addr);
                 _addr2index[addr] = _allowAddrs.length;
             }
@@ -1995,18 +2001,21 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function remainSupply() public view returns (uint256) {
-        if (_maxSupply == 0) return type(uint256).max;
-        return _maxSupply - totalSupply();
+        return _maxSupply - _nextTokenId;
     }
 
     function canMint(address addr_) public view returns (bool) {
-        if (_maxSupply > 0 && totalSupply() >= _maxSupply) {
+        if (_nextTokenId >= _maxSupply) {
             return false;
         }
         if(addr_ == owner()) {
             return true;
         }
         return _allowList[addr_] > 0;
+    }
+
+    function mintedTotal() public view returns (uint256) {
+        return _nextTokenId;
     }
 
     // override
@@ -2023,6 +2032,6 @@ contract SRC721 is SRC721Meta, ERC721, ERC721Enumerable, ERC721Burnable {
     }
 
     function version() public pure override returns (string memory) {
-        return "SRC721-burnable-0.0.4";
+        return "SRC721-burnable-0.0.5";
     }
 }
